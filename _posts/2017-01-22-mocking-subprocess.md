@@ -105,3 +105,4 @@ morgan@toaster:~/work/testing$ ./subfun.py
 ----------------------------------------------------------------------
 Ran 1 test in 0.001s
 {% endhighlight %}
+The code can be found [here](https://github.com/unlisted/mocking_subprocess.git).
