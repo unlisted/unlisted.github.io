@@ -5,7 +5,7 @@ date: 2023-07-29
 categories: python, unittest, mock
 ---
 
-What is the difference with respect to patching a function? This whole post only applius to mocking a function, not a class or instance.
+What is the difference with respect to patching a function? This whole post only applies to mocking a function, not a class or instance.
 
 > The spec and spec_set keyword arguments are passed to the MagicMock if patch is creating one for you.
 [patch docs](https://docs.python.org/3/library/unittest.mock.html#patch)
