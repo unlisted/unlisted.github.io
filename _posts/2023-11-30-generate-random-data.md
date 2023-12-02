@@ -55,6 +55,55 @@ id=7612 name='yqdjJbkFbaRUjuGSrQmD' tag='qdjsdoEIOrmVeNaffMHy'
 Putting those two things together gives you a service that can generate random data in the shape of a model provided by an OpenAPI spec. It works, but it's a work in progress. Here's the [code](https://github.com/unlisted/random_api).
 ### Some Code Highlights
 The model can be [persisted](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L50) for future use.  
-The model is [written](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L41C7-L41C7) to temporary file, and then imported using a custom [finder](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L140).
+{% highlight python %}
+def create_model_from_url(url, persistor: BasePersistor) -> str:
+    spec_id = uuid4().hex
+    output_path = Path(TEMP_MODULE_PATH.name) / f"{spec_id}.py"
+    
+    main(["--url", url, "--input-file-type", "openapi", "--output", str(output_path), "--output-model-type", "pydantic_v2.BaseModel", "--use-annotated"])
+    if not output_path.exists():
+        raise RegistrationFailed(spec_id)
+    model_str = output_path.read_text()
+
+
+    fixed_model_str = patterned_field_fixup(model_str)
+    if fixed_model_str != model_str:
+        output_path.write_text(fixed_model_str)
+    
+    persistor.write(spec_id, fixed_model_str)
+    return spec_id
+{% endhighlight %}
+The model is [written](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L41C7-L41C7) to temporary file, and then imported (abusing the import system?) using a custom [finder](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L140). Rather quick when hosted on GCP App Engine, as the module is stored in local in memory files system.
+{% highlight python %}
+def _add_finder(path: str) -> None:
+    class CustomFinder(machinery.PathFinder):
+        _path = [path]
+
+
+        @classmethod
+        def find_spec(cls, fullname, path=None, target=None):
+            return super().find_spec(fullname, cls._path, target)
+
+
+    sys.meta_path.append(CustomFinder)
+{% endhighlight %}
+You can specify which modules you want from those available in generated module. [This](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L112-L117) filters for the selected modules, if any.
+{% highlight python %}
+    members = (getmembers(module, inspect.isclass))
+    if models:
+        target_models = [x.lower() for x in models]
+        clzs = [x[1] for x in members if x[1].__module__ == spec_id and x[0].lower() in target_models]
+    else:
+        clzs = [x[1] for x in members if x[1].__module__ == spec_id]
+{% endhighlight %}
+A new generic [class](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L87) inherits from Polyfactory's ModelFactory ensuring that all child factories create random data for optional fields. That's because all ModelFactories are dynamically created, this simplifies [that](https://github.com/unlisted/random_api/blob/90fc0af6f8f87c22cdae82dcb91dbd182925a2b4/app/importer.py#L128) code.
+{% highlight python %}
+    class MyModelFactory(Generic[T], ModelFactory[T]):
+        __is_base_factory__ = True
+        __allow_none_optionals__ = False
+        def __init_subclass__(cls, *args: Any, **kwargs: Any) -> None:
+            super().__init_subclass__(*args, **kwargs)
+{% endhighlight %}
 ## Todo
-Lots
+* It's the first part of a serivce that can be configured to generate random data of a specific at specific or random intervals and quantities, super useful for testing integrations.
+* Lots of improvements needed here.
